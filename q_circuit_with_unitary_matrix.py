@@ -29,8 +29,8 @@ select_method = "ha"
 n_a_range = range(2,6)
 prob_sum_threshold = 0.001
 norm_threshold = 0.001
-n_train_states = 20000
-n_test_states = 7000
+n_train_states = 2000
+n_test_states = 700
 finite_statistics = "no"
 n_trials = 200000 #it works only if finite_statistics is set to "yes"
 new_dataset = 0 # 0 if the dataset must be new for every iteration vs numb. of ancillae, 1 otherwise
@@ -253,36 +253,30 @@ def train_and_test_y_columns(operator, train_states, test_states):
     y_test = np.array(y_test_exp_val)
     return y_train, y_test
 
-def train_and_test_p_matrices(operator, train_states, test_states,_dim_na, unitary_matrix):
-    """ It evaluates the p matrices of the training states and the test states """
-    p_train_list = []
-    p_test_list = []
-    _dim = 2 *_dim_na
-    for train_state in train_states:
-        global_train_state = constructor_of_global_psi(train_state,_dim_na)
-        rho = time_evolution_Phi(global_train_state, unitary_matrix)
-        probabilities_vector = probabilities_through_povm(rho,_dim)
-        prob_checking_output = checking_prob_vec(probabilities_vector, False)
-        if prob_checking_output == False:
-            raise ValueError(f"The sum of the prob. components deviates from 1 more than {prob_sum_threshold}")
-        probabilities_vector = np.real(probabilities_vector)
-        if finite_statistics == "yes":
-            probabilities_vector = np.random.multinomial(n_trials, probabilities_vector) / n_trials
-        p_train_list.append(probabilities_vector)
-    for test_state in test_states:
-        global_test_state = constructor_of_global_psi(test_state,_dim_na)
-        rho = time_evolution_Phi(global_test_state, unitary_matrix)
-        probabilities_vector = probabilities_through_povm(rho,_dim)
-        prob_checking_output = checking_prob_vec(probabilities_vector, False)
-        if prob_checking_output == False:
-            raise ValueError(f"The sum of the prob. components deviates from 1 more than {prob_sum_threshold}")
-        probabilities_vector = np.real(probabilities_vector)       
-        if finite_statistics == "yes":
-            probabilities_vector = np.random.multinomial(n_trials, probabilities_vector) / n_trials
-        p_test_list.append(probabilities_vector)
-    p_train = np.vstack(p_train_list)
-    p_test = np.vstack(p_test_list)
-    return p_train, p_test
+def train_and_test_p_matrices(operator, train_states, test_states, _dim_na, unitary_matrix):
+    """ It evaluates the two p matrices of the training states and the test states """
+
+    def probabilities_from_database_states(operator, states, _dim_na, unitary_matrix):
+        _dim = 2 *_dim_na
+        probabilities_vector_list = []
+        for state in states:
+            global_state = constructor_of_global_psi(state,_dim_na)
+            rho = time_evolution_Phi(global_state, unitary_matrix)
+            probabilities_vector = probabilities_through_povm(rho,_dim)
+            prob_checking_output = checking_prob_vec(probabilities_vector, False)
+            if prob_checking_output == False:
+                raise ValueError(f"The sum of the prob. components deviates from 1 more than {prob_sum_threshold}")
+            probabilities_vector = np.real(probabilities_vector)
+            if finite_statistics == "yes":
+                probabilities_vector = np.random.multinomial(n_trials, probabilities_vector) / n_trials
+            probabilities_vector_list.append(probabilities_vector)
+            probabilities_vector_np = np.vstack(probabilities_vector_list)
+        return probabilities_vector_np
+        
+    train_prob_vector_np = probabilities_from_database_states(operator, train_states, _dim_na, unitary_matrix)
+    test_prob_vector_np = probabilities_from_database_states(operator, test_states, _dim_na, unitary_matrix)
+
+    return train_prob_vector_np, test_prob_vector_np
 
 def iterate_vs_numb_of_ancillae(n_a_range, n, n_train_states, n_test_states, operator_choice, select_method):
     """ It evaluates the MSRE and its square root for every iteration of the QELM. Each iteration has its own number of ancillae. """
