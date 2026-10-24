@@ -22,16 +22,16 @@ n = 1   #number of initial qubits (related to the dimension of the operator)
 # INPUT
 ######################################################
 
-operator_choice = sigma_y #one can choose among sigma_x, sigma_y, sigma_z
+operator_choice = sigma_z #one can choose among sigma_x, sigma_y, sigma_z
 # selection of the method of unitarization
 # use "ha" for Haar measure method, "gs" for Gram-Schmidt method
 select_method = "ha"
 n_a_range = range(2,6)
 prob_sum_threshold = 0.001
 norm_threshold = 0.001
-n_train_states = 200
-n_test_states = 70
-finite_statistics = "yes"
+n_train_states = 20000
+n_test_states = 7000
+finite_statistics = "no"
 n_trials = 200000 #it works only if finite_statistics is set to "yes"
 new_dataset = 0 # 0 if the dataset must be new for every iteration vs numb. of ancillae, 1 otherwise
 
@@ -376,7 +376,7 @@ def output_recap(n, n_a_range, select_method, norm_threshold,
     print(f"number of training states: {n_test_states}")
     chosen_operator = f_name_of_op(operator_choice)
     print(f"operator to reconstruct: {chosen_operator}")
-    print(f"Finite statistics: {finite_statistics}")
+    print(f"finite statistics: {finite_statistics}")
     if finite_statistics == "yes":
         print(f"Number of trials: {n_trials}")
     print()
@@ -392,7 +392,11 @@ def main():
     output_recap(n, n_a_range, select_method, norm_threshold,
                  prob_sum_threshold, n_train_states, n_test_states,
                  operator_choice, finite_statistics, n_trials)
+    start = perf_counter()
     _msre_list, _sqrt_msre_list = iterate_vs_numb_of_ancillae(n_a_range, n, n_train_states, n_test_states, operator_choice, select_method)
+    end = perf_counter()
+    print("seconds to run the iterated QELM:")
+    print(end-start)
     list_of_numb_of_ancillae = [ _ for _ in n_a_range]
     print("numb. of ancillae vs mean squared relative errors (MSREs):")
     zip_1 = zip(list_of_numb_of_ancillae,_msre_list)
