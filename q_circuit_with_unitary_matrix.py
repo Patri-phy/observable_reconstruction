@@ -219,7 +219,7 @@ def exp_value_through_bracket(operator,state):
 
 def exp_value_through_trace(operator,state):
     """ Expectation value of a operator through trace of op * rho """
-    rho = np.outer(psi,np.conj(psi))
+    rho = np.outer(state,np.conj(state))
     _product = rho @ operator
     return np.trace(_product)
 
