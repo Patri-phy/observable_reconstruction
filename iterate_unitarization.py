@@ -21,11 +21,13 @@ select_method = "ha"
 ######################################################
 # FUNCTIONS FOR GENERATION AND UNITARIZATION
 ######################################################
+
+
 def gen_random_sq_max_rank_matrix(_dim):
     """It is defined to randomly generate a _dim x _dim
     matrix with complex entries. It call itself until the rank is equal to _dim"""
-    real_p = np.random.uniform(low = 0, high = 1, size = [_dim,_dim])
-    imag_p = np.random.uniform(low = 0, high = 1, size = [_dim,_dim])
+    real_p = np.random.uniform(low=0, high=1, size=[_dim, _dim])
+    imag_p = np.random.uniform(low=0, high=1, size=[_dim, _dim])
     mat = (real_p + 1j*imag_p)/np.sqrt(2.0)
     _rank = np.linalg.matrix_rank(mat)
     if _rank == _dim:
@@ -34,6 +36,7 @@ def gen_random_sq_max_rank_matrix(_dim):
         print("calling again the function to get maximum rank")
         mat = gen_random_sq_max_rank_matrix(_dim)
         return mat
+
 
 def haar_measure_unitary_m_generation(_dim):
     '''It returns a random unitary matrix through Haar measure method'''
@@ -44,6 +47,7 @@ def haar_measure_unitary_m_generation(_dim):
     q = np.multiply(q, ph, q)
     return q
 
+
 def gram_schmidt_unitary_m_generation(_dim):
     '''It returns a random unitary matrix through Gram-Schmidt method'''
     mat = gen_random_sq_max_rank_matrix(_dim)
@@ -53,6 +57,7 @@ def gram_schmidt_unitary_m_generation(_dim):
     e_list = _normalization(u_list)
     return np.vstack(e_list)
 
+
 def iter_u_k_vector(mat):
     """Function updating the list of u"""
     _dim = mat.shape[0]
@@ -60,6 +65,7 @@ def iter_u_k_vector(mat):
     for k_index in range(_dim):
         u_list = u_k_vector(mat, u_list, k_index, _dim)
     return u_list
+
 
 def u_k_vector(mat, u_list, k_index, _dim):
     """Evaluation of the new u"""
@@ -71,10 +77,12 @@ def u_k_vector(mat, u_list, k_index, _dim):
     u_list.append(v - _sum)
     return u_list
 
+
 def _projection(v, u):
     """Projection of v on u"""
     _scalar = np.vdot(u, v)/np.vdot(u, u)
     return _scalar*u
+
 
 def _normalization(u_list):
     """It performs the normalization on the vectors of u_list"""
@@ -87,6 +95,7 @@ def _normalization(u_list):
 ######################################################
 # FUNCTION FOR CHECKING IF A MATRIX IS UNITARY
 ######################################################
+
 
 def unitary_m_check(mat, show_plot):
     """It returns True if mat is unitary, False otherwise.
@@ -127,7 +136,7 @@ def unitary_m_check(mat, show_plot):
     ch_3 = np.abs(u_dag_u_minus_I_real) <= _threshold
     ch_4 = np.abs(u_dag_u_imag) <= _threshold
 
-    ch = [ch_1,ch_2,ch_3,ch_4]
+    ch = [ch_1, ch_2, ch_3, ch_4]
 
     ch = np.vstack(ch)
     return ch.all()
@@ -135,6 +144,7 @@ def unitary_m_check(mat, show_plot):
 ######################################################
 # FUNCTIONS ITERATION
 ######################################################
+
 
 def avg_exe_time_vs_dims_without_check(dim_range, n_iter, f):
     """For each dimension it evaluates the average time of execution in seconds"""
@@ -150,6 +160,7 @@ def avg_exe_time_vs_dims_without_check(dim_range, n_iter, f):
         avg_exe_times.append(avg_exe_time)
     return avg_exe_times
 
+
 def avg_exe_time_vs_dims_with_check(dim_range, n_iter, f):
     """For each dimension it evaluates the average time of execution in seconds.
     At each iteration it checks if the matrix is unitary."""
@@ -162,11 +173,13 @@ def avg_exe_time_vs_dims_with_check(dim_range, n_iter, f):
             end = perf_counter()
             check_value = unitary_m_check(mat, False)
             if check_value == False:
-                print(f"Nonunitary matrix; dimension: {dim_index}; iteration {i_iter}")
+                print(
+                    f"Nonunitary matrix; dimension: {dim_index}; iteration {i_iter}")
             exe_times.append(end - start)
         avg_exe_time = np.mean(exe_times)
         avg_exe_times.append(avg_exe_time)
     return avg_exe_times
+
 
 def iterate_avg_exe_time_vs_dims_with_check(dim_range, n_iter, f, n_super_iter):
     """It iterated the calculations of the averages. It includes the check (unitary or not)"""
@@ -178,11 +191,13 @@ def iterate_avg_exe_time_vs_dims_with_check(dim_range, n_iter, f, n_super_iter):
     averages = avg_times_np.sum(axis=0)/n_super_iter
     return averages
 
+
 def iterate_avg_exe_time_vs_dims_without_check(dim_range, n_iter, f, n_super_iter):
     """It iterated the calculations of the averages"""
     avg_exe_times_list_of_list = []
     for _ in tqdm(range(n_super_iter)):
-        avg_exe_times = avg_exe_time_vs_dims_without_check(dim_range, n_iter, f)
+        avg_exe_times = avg_exe_time_vs_dims_without_check(
+            dim_range, n_iter, f)
         avg_exe_times_list_of_list.append(avg_exe_times)
     avg_times_np = np.vstack(avg_exe_times_list_of_list)
     averages = avg_times_np.sum(axis=0)/n_super_iter
@@ -192,14 +207,17 @@ def iterate_avg_exe_time_vs_dims_without_check(dim_range, n_iter, f, n_super_ite
 # PLOT
 ######################################################
 
+
 def _plot(dim_range, exe_time_avg, select_method, select_check, n_iter, n_super_iter):
     """It plots the averages vs dimensions """
     plt.plot(dim_range, exe_time_avg, marker='x')
     plt.grid()
     plt.xlabel("Dimension")
     plt.ylabel("Average execution time (s)")
-    plt.title(f"method: {select_method.upper()}, n_iter: {n_iter}, check: {select_check}, n_super_iter: {n_super_iter}")
+    plt.title(
+        f"method: {select_method.upper()}, n_iter: {n_iter}, check: {select_check}, n_super_iter: {n_super_iter}")
     plt.show()
+
 
 ######################################################
 # OUTPUT
@@ -229,10 +247,11 @@ else:
         f"Invalid select_method: '{select_method}'. Expected 'ha' or 'gs')")
 
 if select_check == "yes":
-    averages = iterate_avg_exe_time_vs_dims_with_check(dim_range, n_iter, f, n_super_iter)
+    averages = iterate_avg_exe_time_vs_dims_with_check(
+        dim_range, n_iter, f, n_super_iter)
 else:
-    averages = iterate_avg_exe_time_vs_dims_without_check(dim_range, n_iter, f, n_super_iter)
-
+    averages = iterate_avg_exe_time_vs_dims_without_check(
+        dim_range, n_iter, f, n_super_iter)
 
 
 print("averages:", averages)
