@@ -29,9 +29,9 @@ select_method = "ha"
 n_a_range = range(2, 6)
 prob_sum_threshold = 0.001
 norm_threshold = 0.001
-n_train_states = 2000
-n_test_states = 700
-finite_statistics = False
+n_train_states = 200000
+n_test_states = 70000
+finite_statistics = True
 n_trials = 200000  # it works only if finite_statistics is set to True
 # False if the dataset is set to be new for every new numb. of ancillae, True otherwise
 unique_dataset = False
@@ -420,7 +420,7 @@ def output_recap(n, n_a_range, select_method, norm_threshold,
     print(f"threshold of the deviation from 1 (norm): {norm_threshold}")
     print(f"threshold of the deviation from 1 (prob): {prob_sum_threshold}")
     print(f"number of training states: {n_train_states}")
-    print(f"number of training states: {n_test_states}")
+    print(f"number of test states: {n_test_states}")
     chosen_operator = f_name_of_op(operator_choice)
     print(f"operator to reconstruct: {chosen_operator}")
     print(f"finite statistics: {finite_statistics}")
@@ -456,18 +456,21 @@ def main():
     print("numb. of ancillae vs mean squared relative errors (MSREs):")
     zip_1 = zip(list_of_numb_of_ancillae, _msre_list)
     for item in zip_1:
-        print(item[0])
-        print(item[1])
-
+        #print(item[0])
+        #print(item[1])
+        pass
     print("numb. of ancillae vs the sqrt of MSREs:")
     zip_2 = zip(list_of_numb_of_ancillae, _sqrt_msre_list)
     for item in zip_2:
-        print(item[0])
+        #print(item[0])
         print(item[1])
-    _plot_of_sqrt_msre(n_a_range, _sqrt_msre_list, n_train_states,
-                       n_test_states, select_method, operator_choice,
-                       finite_statistics, n_trials, unique_dataset)
-
+        pass
+    #_plot_of_sqrt_msre(n_a_range, _sqrt_msre_list, n_train_states,
+    #                   n_test_states, select_method, operator_choice,
+    #                   finite_statistics, n_trials, unique_dataset)
+    print("sqrt_MSRE = np.array (", end = " ")
+    print([*_sqrt_msre_list], sep=',', end = " ")
+    print(") \n")
 
 if __name__ == "__main__":
     main()
