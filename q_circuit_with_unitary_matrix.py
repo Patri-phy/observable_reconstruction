@@ -2,6 +2,8 @@ import numpy as np
 from time import perf_counter
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import datetime
+import textwrap
 
 ######################################################
 # CONSTANTS
@@ -32,9 +34,15 @@ norm_threshold = 0.001
 n_train_states = 200000
 n_test_states = 70000
 finite_statistics = True
-n_trials = 200000  # it works only if finite_statistics is set to True
+n_trials = 200  # it works only if finite_statistics is set to True
 # False if the dataset is set to be new for every new numb. of ancillae, True otherwise
 unique_dataset = False
+super_iter = 34
+# name of datafile / plotfile
+save_input_and_output_data = True
+end_of_name = "means_of_sqrt_MSREs" # final part of the name of the file, it works only if save_input_and_output_data = True
+show_plot = False
+save_plot = True
 
 ######################################################
 # INPUT RECOGNITION
@@ -229,6 +237,7 @@ def probabilities_squared_mod_of_comp(psi):
     psi_sq_mod = psi_mod**2
     return psi_sq_mod
 
+# CHECKING
 
 def checking_prob_vec(prob_vec, verbose):
     """It checks if the deviation from 1 of the sum of the elements
@@ -248,6 +257,7 @@ def checking_prob_vec(prob_vec, verbose):
 
     return is_valid
 
+# OTHER CALCULATIONS
 
 def exp_value_through_bracket(operator, state):
     """ Expectation value of a operator through <psi|op|psi> """
@@ -261,7 +271,7 @@ def exp_value_through_trace(operator, state):
     return np.trace(_product)
 
 ######################################################
-# ITERATION
+# ITERATIONS
 ######################################################
 
 
@@ -301,8 +311,15 @@ def train_and_test_p_matrices(operator, train_states, test_states, _dim_na, unit
         probabilities_vector_list = []
         for state in states:
             global_state = constructor_of_global_psi(state, _dim_na)
-            rho = time_evolution_Phi(global_state, unitary_matrix)
-            probabilities_vector = probabilities_through_povm(rho, _dim)
+            
+            #evalutation through POVM:
+            #rho = time_evolution_Phi(global_state, unitary_matrix)
+            #probabilities_vector = probabilities_through_povm(rho, _dim)
+            
+            #evalutation through squared modules:
+            evolved_global_state = time_evolution_of_psi(global_state, unitary_matrix)
+            probabilities_vector = probabilities_squared_mod_of_comp(evolved_global_state)
+            
             prob_checking_output = checking_prob_vec(
                 probabilities_vector, False)
             if prob_checking_output == False:
@@ -355,6 +372,24 @@ def iterate_vs_numb_of_ancillae(n_a_range, n, n_train_states, n_test_states, ope
         _sqrt_msre_list.append(float(_sqrt_msre))
     return _msre_list, _sqrt_msre_list
 
+def super_iteration(super_iter, n_a_range, n, n_train_states, n_test_states,
+                    operator_choice, select_method):
+    _sqrt_msre_list_of_lists = []
+    start = perf_counter()
+    for _index in range(super_iter):
+        print(f"index of superiteration: {_index}")
+        _msre_list, _sqrt_msre_list = iterate_vs_numb_of_ancillae(n_a_range, n,
+                                                                  n_train_states,
+                                                                  n_test_states,
+                                                                  operator_choice,
+                                                                  select_method)
+        _sqrt_msre_list_of_lists.append(_sqrt_msre_list)
+    end = perf_counter()
+    print(f"seconds to run all the QELMs:")
+    print(end-start)
+    sqrt_MSRE_np = np.vstack(_sqrt_msre_list_of_lists)
+    return sqrt_MSRE_np
+
 ######################################################
 # STATISTICS
 ######################################################
@@ -368,39 +403,45 @@ def msre_and_sqrt_of_msre_funct(y_tilde, y_test):
     _sqrt_msre = np.sqrt(_msre)
     return _msre, _sqrt_msre
 
+def super_iteration_stats(sqrt_MSRE_np):
+    _means = np.mean(sqrt_MSRE_np, axis = 0)
+    _stds = np.std(sqrt_MSRE_np, axis = 0)
+    _mins = np.min(sqrt_MSRE_np, axis = 0)
+    _maxs = np.max(sqrt_MSRE_np, axis = 0)
+    return _means, _stds, _mins, _maxs
+
 ######################################################
 # PLOT
 ######################################################
 
-
-def _plot_of_sqrt_msre(
-    n_a_range,
-    sqrt_msre,
-    n_train_states,
-    n_test_states,
-    select_method,
-    operator_choice,
-    finite_statistics,
-    n_trials,
-    unique_dataset
-):
-    """It plots the sqrt of msre as a function of the number of ancillae """
+def _plot_of_means_of_sqrt_msre(n_a_range, _means, n_train_states,
+                                n_test_states, select_method, operator_name,
+                                finite_statistics, n_trials, unique_dataset,
+                                show_plot, save_plot, filename):
+    """It plots the means of the sqrt of MSREs vs number of ancillae """
     plt.xticks(n_a_range)
-    plt.plot(n_a_range, sqrt_msre, marker='x', linewidth=1)
+    plt.plot(n_a_range, _means, marker='x', linewidth=1)
     plt.xlabel("number of ancillae")
     plt.grid()
-    plt.ylabel("square root of MSRE")
-    operator_name = f_name_of_op(operator_choice)
-    title_0 = f"reconstruction of {operator_name}, "
+    plt.ylabel("mean of the square roots of MSREs")
+    title_0 = f"reconstruction of {operator_name},\n"
     title_1 = f"finite statistics: {finite_statistics}, "
     if finite_statistics == True:
         title_1 += f"numb. of trials: {n_trials}, "
-    title_2 = f"numb. of tr. and test states: ({n_train_states}, {n_test_states}), "
+    title_2 = f"numb. of tr. and test states: ({n_train_states}, {n_test_states}),\n"
     title_3 = f"method of unitar.: {select_method.upper()}, "
-    title_4 = f"unique dataset: {unique_dataset}"
-    title = title_0 + title_1 + title_2 + title_3 + title_4
-    plt.title(title)
-    plt.show()
+    title_4 = f"unique dataset: {unique_dataset}, "
+    title_5 = f"number of superiterations: {super_iter},\n"
+    if save_plot:
+        title_5 += f"related filename: {filename}"
+    title = title_0 + title_1 + title_2 + title_3 + title_4 + title_5
+    plt.title("\n".join(textwrap.wrap(title, 60)), fontsize=9)
+    plt.tight_layout()
+    if save_plot:
+        plt.savefig(f'{filename}.png')
+    if show_plot:
+        plt.show()
+
 
 ######################################################
 # OUTPUT
@@ -408,27 +449,38 @@ def _plot_of_sqrt_msre(
 
 # RECAP
 
-
-def output_recap(n, n_a_range, select_method, norm_threshold,
-                 prob_sum_threshold, n_train_states, n_test_states,
-                 operator_choice, finite_statistics, n_trials,
-                 unique_dataset):
-    print(f"Recap of inputs:")
+def input_recap(n_a_range, select_method,
+                prob_sum_threshold, n_train_states, n_test_states,
+                operator_name, finite_statistics, n_trials, super_iter,
+                unique_dataset, filename):
+    """It prints the input variables and returns the strings"""
     list_of_numb_of_ancillae = [_ for _ in n_a_range]
-    print(f"range of ancilla variables: {list_of_numb_of_ancillae}")
-    print(f"selected method for unitarization: {select_method}")
-    print(f"threshold of the deviation from 1 (norm): {norm_threshold}")
-    print(f"threshold of the deviation from 1 (prob): {prob_sum_threshold}")
-    print(f"number of training states: {n_train_states}")
-    print(f"number of test states: {n_test_states}")
-    chosen_operator = f_name_of_op(operator_choice)
-    print(f"operator to reconstruct: {chosen_operator}")
-    print(f"finite statistics: {finite_statistics}")
+    _str_1 = f"range of ancilla variables: {list_of_numb_of_ancillae}\n"
+    _str_2 = f"selected method for unitarization: {select_method}\n"
+    _str_3 = f"threshold of the deviation from 1 (prob): {prob_sum_threshold}\n"
+    _str_4 = f"number of training states: {n_train_states}\n"
+    _str_5 = f"number of test states: {n_test_states}\n"
+    _str_6 = f"operator to reconstruct: {operator_name}\n"
+    _str_7 = f"finite statistics: {finite_statistics}"
     if finite_statistics == True:
-        print(f"number of trials: {n_trials}")
-    print(f"unique dataset: {unique_dataset}")
-    print()
-
+        _str_7 += f", number of trials: {n_trials}\n"
+    else:
+        _str_7 += "\n"
+    _str_8 = f"unique dataset: {unique_dataset}\n"
+    _str_9 = f"number of superiterations: {super_iter}\n"
+    if save_input_and_output_data == True:
+        _str_10 = f"data saved in the file {filename}\n"
+    else:
+        _str_10 = f"data not saved in a file\n"
+    if save_plot == True:
+        _str_11 = f"plot saved in the file {filename}"
+    else:
+        _str_11 = f"plot not saved in a file"
+    _str = _str_1 + _str_2 + _str_3 + _str_4 + _str_5 + _str_6 + _str_7 + _str_8 + _str_9 + _str_10 + _str_11
+    _commented_str = "#"+_str_1 +"#"+ _str_2 +"#"+ _str_3 +"#"+ _str_4 +"#"+ _str_5 +"#"+ _str_6 +"#"+ _str_7 +"#"+ _str_8 +"#"+ _str_9 +"#"+ _str_10 +"#" + _str_11 
+    print(f"Recap of inputs:")
+    print(_str)
+    return _commented_str
 
 def recap_of_functions():
     list_of_functions = [k for k, v in list(globals().items())
@@ -437,40 +489,48 @@ def recap_of_functions():
     for item in list_of_functions:
         print(item)
 
+def output_print(_means, _stds, _mins, _maxs):
+    print("means of sqrt of MSREs:")
+    print(_means)
+    print("stds of sqrt of MSREs:")
+    print(_stds)
+    print("mins of sqrt of MSREs:")
+    print(_mins)
+    print("maxs of sqrt of MSREs:")
+    print(_maxs)
+
+# FILE CREATION AND WRITING
+
+def timeStamped(fname, fmt='%Y-%m-%d-%H-%M-%S_{fname}'):
+    return datetime.datetime.now().strftime(fmt).format(fname=fname)
+
+######################################################
+# MAIN
+######################################################
 
 def main():
     validate_input(select_method, finite_statistics, unique_dataset)
-    output_recap(n, n_a_range, select_method, norm_threshold,
-                 prob_sum_threshold, n_train_states, n_test_states,
-                 operator_choice, finite_statistics, n_trials, unique_dataset)
-    start = perf_counter()
-    _msre_list, _sqrt_msre_list = iterate_vs_numb_of_ancillae(n_a_range, n,
-                                                              n_train_states,
-                                                              n_test_states,
-                                                              operator_choice,
-                                                              select_method)
-    end = perf_counter()
-    print("seconds to run the iterated QELM:")
-    print(end-start)
-    list_of_numb_of_ancillae = [_ for _ in n_a_range]
-    print("numb. of ancillae vs mean squared relative errors (MSREs):")
-    zip_1 = zip(list_of_numb_of_ancillae, _msre_list)
-    for item in zip_1:
-        #print(item[0])
-        #print(item[1])
-        pass
-    print("numb. of ancillae vs the sqrt of MSREs:")
-    zip_2 = zip(list_of_numb_of_ancillae, _sqrt_msre_list)
-    for item in zip_2:
-        #print(item[0])
-        print(item[1])
-        pass
-    #_plot_of_sqrt_msre(n_a_range, _sqrt_msre_list, n_train_states,
-    #                   n_test_states, select_method, operator_choice,
-    #                   finite_statistics, n_trials, unique_dataset)
-    print("sqrt_MSRE = np.array (", end = " ")
-    print([*_sqrt_msre_list], sep=',', end = " ")
-    print(") \n")
+    filename = timeStamped(end_of_name) # in case of datafile / plotfile generation
+    operator_name = f_name_of_op(operator_choice)
+    _commented_str = input_recap(n_a_range, select_method,
+                     prob_sum_threshold, n_train_states, n_test_states,
+                     operator_name, finite_statistics, n_trials, super_iter,
+                     unique_dataset, filename)
+    sqrt_MSRE_np = super_iteration(super_iter, n_a_range, n, n_train_states,
+                                   n_test_states, operator_choice, select_method)
+    _means, _stds, _mins, _maxs = super_iteration_stats(sqrt_MSRE_np)
+    output_print(_means, _stds, _mins, _maxs)
+    _plot_of_means_of_sqrt_msre(n_a_range, _means, n_train_states,
+                                n_test_states, select_method, operator_name,
+                                finite_statistics, n_trials, unique_dataset,
+                                show_plot, save_plot, filename)
+    if save_input_and_output_data == True:
+        with open(filename+".csv", "a") as f:         # "a" = append, never truncates
+            f.write(f"# run {filename}\n")     # header line marking this run
+            f.write(_commented_str+"\n")
+            f.write("#means of sqrt of MSREs vs numb. of ancillae\n")
+            np.savetxt(f, _means, delimiter=',') #, fmt='%g')
+            f.write("\n")                               # blank line
 
 if __name__ == "__main__":
     main()
