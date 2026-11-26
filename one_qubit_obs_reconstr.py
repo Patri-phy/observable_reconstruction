@@ -51,8 +51,8 @@ normal_stat_state_gen = True #if True (False) it uses normal (uniform) distr. wh
 rho_comp_POVM_formalism = True # activates for POVM built on computational basis; not valid for effPOVM = True
 
 #iteration vs n_trials; use None to set infinite precision
-n_trials_tr_vec = [None]*4
-n_trials_test_vec = [int(1e3), int(1e4), int(1e5), int(1e6)]
+n_trials_tr_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
+n_trials_test_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
 
 #statistics
 super_iter = 100 #number of runs per each number of ancillae / per each number of outcomes
@@ -63,6 +63,8 @@ save_plot = False #save a plot with the name using end_of_name
 
 # name of the plotfile
 end_of_name = "means_of_MSEs" # final part of the name of the file, it works only if save_plot = True
+
+n_input_dim = 4
 
 ######################################################
 # INPUT
@@ -390,6 +392,32 @@ def train_and_test_y_columns(operator, train_states, test_states):
         return np.real(y)
     return y_column(operator, train_states), y_column(operator, test_states)
 
+def train_and_test_p_matrices_eff_POVM_and_tr_cond_numb(train_states, test_states, eff_POVM, n_trials_tr, n_trials_test):
+    """Evaluates the two p matrices through an effective POVM; it also evaluate the condition number of the train prob. matrix"""
+    def prob_from_database_states(states, n_trials):
+        probabilities_vector_list = []
+        for state in states:
+            rho = np.outer(state, state.conj())
+            probabilities_vector = probabilities_through_eff_povm(eff_POVM, rho)
+            if not checking_prob_vec(probabilities_vector, False):
+                raise ValueError(
+                    f"The sum of the prob. components deviates from 1 more than {prob_sum_threshold}"
+                )
+            probabilities_vector = np.clip(np.real(probabilities_vector), 0.0, 1.0)
+            probabilities_vector /= np.sum(probabilities_vector)
+            if n_trials != None:
+                probabilities_vector = np.random.multinomial(
+                    n_trials, probabilities_vector) / n_trials
+            probabilities_vector_list.append(probabilities_vector)
+        return np.vstack(probabilities_vector_list)
+    def condition_numb_eval(_matrix):
+        s_trunc = np.linalg.svd(_matrix, compute_uv=False) [:n_input_dim]
+        return s_trunc[0] / s_trunc[-1]
+    
+    tr_prob_matrix = prob_from_database_states(train_states, n_trials_tr)
+   
+    return tr_prob_matrix, prob_from_database_states(test_states, n_trials_test),condition_numb_eval(tr_prob_matrix)
+
 def train_and_test_p_matrices_eff_POVM(train_states, test_states, eff_POVM, n_trials_tr, n_trials_test):
     """Evaluates the two p matrices through an effective POVM."""
     def prob_from_database_states(states, n_trials):
@@ -484,7 +512,7 @@ def iterate_vs_numb_of_ancillae(n_range, n_train_states, n_test_states, observab
 
 def iterate_vs_numb_of_outcomes(n_range, n_train_states, n_test_states, observable_expr, n_trials_tr, n_trials_test):
     """ It evaluates the metrics for every iteration of the QELM. Each iteration has its own number of outcomes. """
-    _msre_list = []; _sqrt_msre_list = []; _mse_list = []
+    _msre_list = []; _sqrt_msre_list = []; _mse_list = []; _con_numb_list = []
     _index = 0
     def isometry_generation(n):
         """It generates a 2n x 2 isometry"""
@@ -501,14 +529,14 @@ def iterate_vs_numb_of_outcomes(n_range, n_train_states, n_test_states, observab
             y_train = np.real(y_train)
             y_test = np.real(y_test)
             _index += 1 * unique_dataset
-        p_train, p_test = train_and_test_p_matrices_eff_POVM(train_states, test_states, eff_POVM, n_trials_tr, n_trials_test)
+        p_train, p_test, tr_cond_numb = train_and_test_p_matrices_eff_POVM_and_tr_cond_numb(train_states, test_states, eff_POVM, n_trials_tr, n_trials_test)
         #p_plus = np.linalg.pinv(p_train)
         #w = p_plus @ y_train
         #y_tilde = p_test @ w  # y_tilde is the vector of predicted expectation values
         y_tilde = p_test @ ( np.linalg.pinv(p_train) @ y_train )
         _msre, _sqrt_msre, _mse = metrics(y_tilde, y_test)
-        _msre_list.append(_msre); _sqrt_msre_list.append(_sqrt_msre); _mse_list.append(_mse)
-    return _msre_list, _sqrt_msre_list, _mse_list
+        _msre_list.append(_msre); _sqrt_msre_list.append(_sqrt_msre); _mse_list.append(_mse); _con_numb_list.append(tr_cond_numb)
+    return _msre_list, _sqrt_msre_list, _mse_list, _con_numb_list
 
 
 ######################################################
@@ -526,11 +554,13 @@ def super_iteration(super_iter, n_range, n_train_states, n_test_states,
         args = (n_range, n_train_states, n_test_states, observable_expr, unitar_method, n_trials_tr, n_trials_test)
 
     _mse_list_of_lists = []
+    _cond_numb_list_of_lists = []
     for _index in range(super_iter):
-        _msre_list, _sqrt_msre_list, _mse_list = f_iteration(*args)
+        _msre_list, _sqrt_msre_list, _mse_list, _con_numb_list = f_iteration(*args)
         _mse_list_of_lists.append(_mse_list)
+        _cond_numb_list_of_lists.append(_con_numb_list)
 
-    return np.vstack(_mse_list_of_lists)
+    return np.vstack(_mse_list_of_lists), np.vstack(_cond_numb_list_of_lists)
 
 ######################################################
 # ITERATION VS FINITE STAT PRECISION
@@ -541,16 +571,19 @@ def super_iteration_vs_trials_vec(super_iter, n_range, n_train_states,
                                      unitar_method, eff_POVM_selection,
                                      n_trials_tr_vec, n_trials_test_vec,):
     """Runs super_iteration across paired (train, test) shot-count configurations."""
-    mse_np_list = []
+    mse_np_list_of_lists = []
+    cond_numb_list_of_lists = []
     start = perf_counter()
     for idx in tqdm(range(len(n_trials_tr_vec))):
-        mse_np_list.append( super_iteration(super_iter, n_range, n_train_states,
-                             n_test_states, observable_expr,
-                             unitar_method, eff_POVM_selection,
-                             n_trials_tr_vec[idx], n_trials_test_vec[idx],)  )
+        mse_np_list, cond_numb_list = super_iteration(super_iter, n_range, n_train_states,
+                                      n_test_states, observable_expr,
+                                      unitar_method, eff_POVM_selection,
+                                      n_trials_tr_vec[idx], n_trials_test_vec[idx],)   
+        mse_np_list_of_lists.append(mse_np_list)
+        cond_numb_list_of_lists.append(cond_numb_list)
     end = perf_counter()
     print(f"execution time: {end - start}")
-    return np.array(mse_np_list)
+    return np.array(mse_np_list_of_lists), np.array(cond_numb_list_of_lists)
 
 
 ######################################################
@@ -608,6 +641,30 @@ def _plot_of_means_of_mse(super_iter, n_range, n_train_states, n_test_states,
     if show_plot: plt.show()
     if save_plot: plt.savefig(filename+f"{end_of_name}.png") 
 
+def _plot_of_means_of_cond_numb(super_iter, n_range, n_train_states, n_test_states,
+                                operator_name, unitar_method, eff_POVM_selection,
+                                n_trials_tr_vec, n_trials_test_vec, _means_cond_numb, ):
+    """It plots the means of the condition number vs number of ancillae / number of outcomes """    
+    labels = [str((tr, te)) for tr, te in zip(n_trials_tr_vec, n_trials_test_vec, strict=True)]
+    for row, label in zip(_means_cond_numb, labels):
+        plt.plot(n_range, row, marker='x', linewidth=1, label=label)
+    plt.yscale('log')
+    plt.xticks(n_range)
+    plt.ylabel("mean of condition numbers")
+    plt.xlabel("numb. of outcomes") if eff_POVM_selection else plt.xlabel("numb. of ancillae")
+    plt.grid(True, which="both", linestyle="--", alpha=0.5)
+    plt.legend(title="Numb. of trials (tr, te)") #, title_fontsize=12)
+    t1 = f"reconstruction of {operator_name}, numb. of superit.: {super_iter}, "
+    t2 = f"numb. of (tr.,test) states: ({n_train_states}, {n_test_states})\n"
+    t3 = f"unitar. method: {unitar_method}, "
+    t4 = "using qudits as a reservoir" if eff_POVM_selection else "using ancillae"
+    title = t1 + t2 + t3 + t4
+    plt.title(title)
+    #plt.tight_layout()
+    plt.show()
+    #if show_plot: plt.show()
+    #if save_plot: plt.savefig(filename+f"{end_of_name}.png") 
+
 ######################################################
 # OUTPUT
 ######################################################
@@ -644,18 +701,22 @@ def main():
     filename = timeStamped(end_of_name) # in case of datafile / plotfile generation
     operator_name, operator = match_observable_or_generate_random(observable_expr)
     print_inputs()
-    mse_np = super_iteration_vs_trials_vec(super_iter, n_range, n_train_states,
+    mse_np, cond_numb_np = super_iteration_vs_trials_vec(super_iter, n_range, n_train_states,
                                               n_test_states, operator,
                                               unitar_method, eff_POVM_selection,
                                               n_trials_tr_vec, n_trials_test_vec,)
-
-    _means, _stds, _mins, _maxs = super_iteration_stats(mse_np)
+    
+    _means_mse, _stds_mse, _mins_mse, _maxs_mse = super_iteration_stats(mse_np)
+    _means_cond_numb, _stds_cond_numb, _mins_cond_numb, _maxs_cond_numb = super_iteration_stats(cond_numb_np)
 
     _plot_of_means_of_mse(super_iter, n_range, n_train_states, n_test_states,
                           operator_name, unitar_method, eff_POVM_selection,
-                          n_trials_tr_vec, n_trials_test_vec, _means,
+                          n_trials_tr_vec, n_trials_test_vec, _means_mse,
                           show_plot, save_plot, filename, end_of_name)
     
+    _plot_of_means_of_cond_numb(super_iter, n_range, n_train_states, n_test_states,
+                                operator_name, unitar_method, eff_POVM_selection,
+                                n_trials_tr_vec, n_trials_test_vec, _means_cond_numb, )
 
 if __name__ == "__main__":
     main()
