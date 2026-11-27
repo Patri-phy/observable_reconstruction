@@ -48,14 +48,14 @@ unique_dataset = False # False if the dataset is set to be new for every new num
 normal_stat_state_gen = True #if True (False) it uses normal (uniform) distr. while generating ket components
 
 # probability evaluation
-rho_comp_POVM_formalism = True # activates for POVM built on computational basis; not valid for effPOVM = True
+rho_comp_POVM_formalism = True # activates for POVM built on computational basis; not valid for eff_POVM_selection = True
 
 #iteration vs n_trials; use None to set infinite precision
 n_trials_tr_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
 n_trials_test_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
 
 #statistics
-super_iter = 100 #number of runs per each number of ancillae / per each number of outcomes
+super_iter = 1 #number of runs per each number of ancillae / per each number of outcomes
 
 # name of plot
 show_plot = True
@@ -411,11 +411,11 @@ def train_and_test_p_matrices_eff_POVM_and_tr_cond_numb(train_states, test_state
             probabilities_vector_list.append(probabilities_vector)
         return np.vstack(probabilities_vector_list)
     def condition_numb_eval(_matrix):
-        s_trunc = np.linalg.svd(_matrix, compute_uv=False) [:n_input_dim]
-        return s_trunc[0] / s_trunc[-1]
+        s_trunc = np.linalg.svd(_matrix, compute_uv=False) [:n_input_dim] #singular values until n_input_dim in descending order
+        return s_trunc[0] / s_trunc[-1] #s_max / s_min
     
     tr_prob_matrix = prob_from_database_states(train_states, n_trials_tr)
-   
+    
     return tr_prob_matrix, prob_from_database_states(test_states, n_trials_test),condition_numb_eval(tr_prob_matrix)
 
 def train_and_test_p_matrices_eff_POVM(train_states, test_states, eff_POVM, n_trials_tr, n_trials_test):
