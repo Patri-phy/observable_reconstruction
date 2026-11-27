@@ -32,10 +32,10 @@ observable_rng = 42 # valid only if observable_expr = None; use observable_rng =
 unitar_method = "ha" # use "ha" for Haar measure method, "gs" for Gram-Schmidt method
 
 # effPOVM selection (if effPOVM = True the prob. vector is evaluated fixing the number of outcomes)
-eff_POVM_selection = True
+eff_POVM_selection = False
 
 # number of ancillae / number of outcomes range selection
-n_range = range(2, 17)  # number of ancillae / number of outcomes
+n_range = range(2, 4)  # number of ancillae / number of outcomes
 
 # check of calculations
 prob_sum_threshold = 0.001
@@ -55,7 +55,7 @@ n_trials_tr_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
 n_trials_test_vec = [int(1e3), int(1e4), int(1e5), int(1e6), None]
 
 #statistics
-super_iter = 1 #number of runs per each number of ancillae / per each number of outcomes
+super_iter = 10 #number of runs per each number of ancillae / per each number of outcomes
 
 # name of plot
 show_plot = True
@@ -341,6 +341,14 @@ def exp_value_through_trace(observable, state):
     return np.trace( np.outer(state, np.conj(state)) @ observable )
 
 ######################################################
+# CONDITION NUMBER
+######################################################
+
+def condition_numb_eval(_matrix):
+    s_trunc = np.linalg.svd(_matrix, compute_uv=False) [:n_input_dim] #singular values until n_input_dim in descending order
+    return s_trunc[0] / s_trunc[-1] #s_max / s_min
+
+######################################################
 # EFFECTIVE POVM
 ######################################################
 
@@ -410,9 +418,6 @@ def train_and_test_p_matrices_eff_POVM_and_tr_cond_numb(train_states, test_state
                     n_trials, probabilities_vector) / n_trials
             probabilities_vector_list.append(probabilities_vector)
         return np.vstack(probabilities_vector_list)
-    def condition_numb_eval(_matrix):
-        s_trunc = np.linalg.svd(_matrix, compute_uv=False) [:n_input_dim] #singular values until n_input_dim in descending order
-        return s_trunc[0] / s_trunc[-1] #s_max / s_min
     
     tr_prob_matrix = prob_from_database_states(train_states, n_trials_tr)
     
@@ -438,6 +443,41 @@ def train_and_test_p_matrices_eff_POVM(train_states, test_states, eff_POVM, n_tr
         return np.vstack(probabilities_vector_list)
 
     return prob_from_database_states(train_states, n_trials_tr), prob_from_database_states(test_states, n_trials_test)
+
+
+def train_and_test_p_matrices_and_tr_cond_numb(operator, train_states, test_states, _dim_na, unitary_matrix, n_trials_tr, n_trials_test):
+    """ It evaluates the two p matrices of the training states and the test states """
+
+    def prob_from_database_states(operator, states, _dim_na, unitary_matrix, n_trials):
+        _dim = 2 * _dim_na
+        probabilities_vector_list = []
+        for state in states:
+            global_state = constructor_of_global_psi(state, _dim_na)
+            
+            if rho_comp_POVM_formalism:
+                #evalutation through POVM:
+                probabilities_vector = probabilities_through_computational_povm(
+                                       time_evolution_Phi(global_state, unitary_matrix))
+            else:
+                #evalutation through squared modules:
+                evolved_global_state = time_evolution_of_psi(global_state, unitary_matrix)
+                probabilities_vector = probabilities_squared_mod_of_comp(evolved_global_state)
+            
+            prob_checking_output = checking_prob_vec(
+                probabilities_vector, False)
+            if prob_checking_output == False:
+                raise ValueError(
+                    f"The sum of the prob. components deviates from 1 more than {prob_sum_threshold}")
+            probabilities_vector = np.real(probabilities_vector)
+            if n_trials != None:
+                probabilities_vector = np.random.multinomial(
+                    n_trials, probabilities_vector) / n_trials
+            probabilities_vector_list.append(probabilities_vector)
+        return np.vstack(probabilities_vector_list)
+
+    train_prob_vector_np = prob_from_database_states(operator, train_states, _dim_na, unitary_matrix, n_trials_tr)
+
+    return train_prob_vector_np, prob_from_database_states(operator, test_states, _dim_na, unitary_matrix, n_trials_test), condition_numb_eval(train_prob_vector_np)
 
 def train_and_test_p_matrices(operator, train_states, test_states, _dim_na, unitary_matrix, n_trials_tr, n_trials_test):
     """ It evaluates the two p matrices of the training states and the test states """
@@ -487,27 +527,23 @@ def iterate_vs_numb_of_ancillae(n_range, n_train_states, n_test_states, observab
         f = haar_measure_unitary_m_generation
     if unitar_method == 'gs':
         f = gram_schmidt_unitary_m_generation
-    def metrics_vs_n_ancillae():
-        _msre_list = []; _sqrt_msre_list = []; _mse_list = []
-        _index = 0
-        for n_a in n_range:
-            _dim_na = 2**n_a; _dim = 2**(n_a + 1)
-            if _index == 0:
-                train_states, test_states = train_and_test_states_generation(
-                    n_train_states, n_test_states, normal_stat_state_gen)
-                y_train, y_test = train_and_test_y_columns(
-                    observable_expr, train_states, test_states)
-                _index += 1 * unique_dataset
-            p_train, p_test = train_and_test_p_matrices(
-                observable_expr, train_states, test_states, _dim_na, f(_dim), n_trials_tr, n_trials_test)
-            y_tilde = p_test @ ( np.linalg.pinv(p_train) @ y_train ) # y_tilde is the vector of predicted expectation values
-            _msre, _sqrt_msre, _mse = metrics(y_tilde, y_test)
-            _msre_list.append(_msre)
-            _sqrt_msre_list.append(_sqrt_msre)
-            _mse_list.append(_mse)
-        return _msre_list, _sqrt_msre_list, _mse_list
-    _msre_list, _sqrt_msre_list, _mse_list = metrics_vs_n_ancillae()
-    return _msre_list, _sqrt_msre_list, _mse_list
+
+    _msre_list = []; _sqrt_msre_list = []; _mse_list = []; _con_numb_list = []
+    _index = 0
+    for n_a in n_range:
+        _dim_na = 2**n_a; _dim = 2**(n_a + 1)
+        if _index == 0:
+            train_states, test_states = train_and_test_states_generation(
+                n_train_states, n_test_states, normal_stat_state_gen)
+            y_train, y_test = train_and_test_y_columns(
+                observable_expr, train_states, test_states)
+            _index += 1 * unique_dataset
+        p_train, p_test, tr_cond_numb = train_and_test_p_matrices_and_tr_cond_numb(
+            observable_expr, train_states, test_states, _dim_na, f(_dim), n_trials_tr, n_trials_test)
+        y_tilde = p_test @ ( np.linalg.pinv(p_train) @ y_train ) # y_tilde is the vector of predicted expectation values
+        _msre, _sqrt_msre, _mse = metrics(y_tilde, y_test)
+        _msre_list.append(_msre); _sqrt_msre_list.append(_sqrt_msre); _mse_list.append(_mse); _con_numb_list.append(tr_cond_numb)
+    return _msre_list, _sqrt_msre_list, _mse_list, _con_numb_list
 
 
 def iterate_vs_numb_of_outcomes(n_range, n_train_states, n_test_states, observable_expr, n_trials_tr, n_trials_test):
